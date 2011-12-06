@@ -195,6 +195,13 @@ class RestoreTests < ThinpTestCase
       end
     end
   end
+
+  def test_can_restore_heinz_problem_xml
+    restore_metadata('./heinz-problem-metadata.xml', @metadata_dev)
+    with_standard_pool(@size) do |pool|
+      with_thin(pool, @volume_size, 0) {|thin| wipe_device(thin)}
+    end
+  end
 end
 
 #----------------------------------------------------------------
