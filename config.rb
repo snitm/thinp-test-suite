@@ -63,10 +63,10 @@ module Config
       :metadata_size => 32768,
       :data_dev => '/dev/tst/pool',
       :data_size => 419463168,
-      :volume_size => 70377, # 2097152,
-      :data_block_size => 524288,
+      :volume_size => 270377, # 196608, # 270377, # 196608, # 2097152,
+      :data_block_size => 65536, # 524288,
       :low_water_mark => 5,
-      :mass_fs_tests_parallel_runs => 128
+      :mass_fs_tests_parallel_runs => 2
     }
 
   }

@@ -69,11 +69,9 @@ module Utils
   end
 
   def verify_device(ifile, ofile)
-    iotype = 'random'
-    pattern = "iot"
-    size = dev_size(ifile)
+    size = [dev_size(ifile), dev_size(ofile)].min 
 
-    ProcessControl.run("dt iomode=verify if=#{ifile} of=#{ofile} bs=4M rseed=1234")
+    ProcessControl.run("dt if=#{ifile} of=#{ofile} capacity=#{size*512} iomode=verify bs=4M rseed=1234")
   end
 
   def get_dev_code(path)
