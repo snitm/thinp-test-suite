@@ -21,6 +21,10 @@ class ExternalOriginTests < ThinpTestCase
   tag :thinp_target
 
   def test_origin_unchanged
+    if (@volume_size % @data_block_size == 0)
+    	@volume_size -= @data_block_size * 4 / 5
+    end
+
     tvm = VM.new
     tvm.add_allocation_volume(@data_dev, 0, dev_size(@data_dev))
 
@@ -38,15 +42,7 @@ class ExternalOriginTests < ThinpTestCase
         with_new_thin(pool, @volume_size, 0, :origin => origin) do |thin|
           verify_device(thin, origin)
 
-	  if (@volume_size % @data_block_size != 0)
-            # dm-thin doesn't support partial block copies yet.
-            assert_raise(ExitError) do
-              dt_device(thin)
-            end
-          else
-            dt_device(thin)
-          end
-
+          dt_device(thin)
           verify_device(thin, origin)
         end
       end
