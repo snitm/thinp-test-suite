@@ -411,6 +411,32 @@ class CacheTests < ThinpTestCase
     end
   end
 
+  def test_writethrough_ext4_uuids_match
+    size = meg(10)
+
+    # wipe the origin to ensure we don't accidentally have the same
+    # data on it.
+    with_standard_linear(:data_size => size) do |origin|
+      wipe_device(origin)
+    end
+
+    uuid = "deadbeef-cafe-dead-beef-cafedeadbeef"
+
+    # format the cache device with a specific uuid
+    with_standard_cache(:format => true,
+                        :io_mode => :writethrough,
+                        :data_size => size) do |cache|    
+      fs = FS::file_system(:ext4, cache)
+      fs.format(:uuid => uuid)
+      FS::assert_fs_uuid(uuid, cache)
+    end
+
+    # origin should have the same uuid as the cache
+    with_standard_linear(:data_size => size) do |origin|
+      FS::assert_fs_uuid(uuid, origin)
+    end
+  end
+
   def test_origin_grow
     # format and set up a git repo on the cache
     stack = CacheStack.new(@dm, @metadata_dev, @data_dev,

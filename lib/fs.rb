@@ -3,6 +3,8 @@ require 'lib/process'
 require 'lib/prelude'
 require 'pathname'
 
+include Test::Unit::Assertions
+
 #----------------------------------------------------------------
 
 module FS
@@ -14,8 +16,8 @@ module FS
       @mount_point = nil
     end
 
-    def format
-      ProcessControl.run(mkfs_cmd)
+    def format(opts = Hash.new)
+      ProcessControl.run(mkfs_cmd(opts))
     end
 
     def mount(mount_point, opts = Hash.new)
@@ -45,13 +47,16 @@ module FS
   class Ext4 < BaseFS
     def mount_cmd(mount_point, opts); "mount #{dev} #{mount_point} #{opts[:discard] ? "-o discard" : ''}"; end
     def check_cmd; "fsck.ext4 -fn #{dev}"; end
-    def mkfs_cmd; "mkfs.ext4 -E lazy_itable_init=1 #{dev}"; end
+    def mkfs_cmd(opts)
+      uuid = opts.fetch(:uuid, '')
+      "mkfs.ext4 -E lazy_itable_init=1 #{opts[:uuid] ? "-U #{uuid}" : ''} #{dev}"
+    end
   end
 
   class XFS < BaseFS
     def mount_cmd(mount_point, opts); "mount -o nouuid#{opts[:discard] ? ",discard" : ''} #{dev} #{mount_point}"; end
     def check_cmd; "xfs_repair -n #{dev}"; end
-    def mkfs_cmd; "mkfs.xfs -f #{dev}"; end
+    def mkfs_cmd(opts); "mkfs.xfs -f #{dev}"; end
   end
 
   FS_CLASSES = {
@@ -65,6 +70,16 @@ module FS
     end
 
     FS_CLASSES[type].new(dev)
+  end
+
+  def FS.assert_fs_uuid(uuid, dev)
+    blkid_output = ProcessControl.run("blkid #{dev}")
+    m = blkid_output.match('\S+: UUID="(\S+)" TYPE="\S+"')
+    if m.nil?
+      raise "couldn't get uuid using blkid"
+    else
+      assert_equal(uuid, m[1])
+    end
   end
 end
 
