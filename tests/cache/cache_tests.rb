@@ -422,18 +422,26 @@ class CacheTests < ThinpTestCase
 
     uuid = "deadbeef-cafe-dead-beef-cafedeadbeef"
 
-    # format the cache device with a specific uuid
     with_standard_cache(:format => true,
                         :io_mode => :writethrough,
                         :data_size => size) do |cache|    
+      # establish thresholds that were used in report to dm-devel
+      cache.message(0, "migration_threshold 32768")
+      cache.message(0, "random_threshold 4")
+      status = CacheStatus.new(cache)
+      assert(status.core_args.assoc('migration_threshold'), '32768')
+      assert(status.policy_args.assoc('random_threshold'), '4')
+
+      # format the cache device with a specific uuid
       fs = FS::file_system(:ext4, cache)
       fs.format(:uuid => uuid)
       FS::assert_fs_uuid(uuid, cache)
-    end
 
-    # origin should have the same uuid as the cache
-    with_standard_linear(:data_size => size) do |origin|
-      FS::assert_fs_uuid(uuid, origin)
+      # origin should have the same uuid as the cache
+      # - note: cache is still active at this point
+      with_standard_linear(:data_size => size) do |origin|
+        FS::assert_fs_uuid(uuid, origin)
+      end
     end
   end
 
