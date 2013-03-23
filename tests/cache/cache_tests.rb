@@ -432,6 +432,13 @@ class CacheTests < ThinpTestCase
       assert(status.core_args.assoc('migration_threshold'), '32768')
       assert(status.policy_args.assoc('random_threshold'), '4')
 
+      # reload table with raw origin
+      table = cache.active_table
+      table.targets[0].args[2] = @data_dev
+      cache.pause do
+        cache.load(table)
+      end
+
       # format the cache device with a specific uuid
       fs = FS::file_system(:ext4, cache)
       fs.format(:uuid => uuid)
@@ -439,9 +446,7 @@ class CacheTests < ThinpTestCase
 
       # origin should have the same uuid as the cache
       # - note: cache is still active at this point
-      with_standard_linear(:data_size => size) do |origin|
-        FS::assert_fs_uuid(uuid, origin)
-      end
+      FS::assert_fs_uuid(uuid, @data_dev)
     end
   end
 
@@ -488,7 +493,7 @@ class CacheTests < ThinpTestCase
     opts = Hash.new
     stack = CacheStack.new(@dm, @metadata_dev, @data_dev, opts)
     stack.activate do |stack|
-      assert(stack.cache.table =~ /0 41943040 cache \d+:\d+ \d+:\d+ \d+:\d+ 512 0 default 0/)
+      assert(stack.cache.table =~ /0 \d+ cache \d+:\d+ \d+:\d+ \d+:\d+ 512 0 default 0/)
     end
   end
 
