@@ -412,20 +412,18 @@ class CacheTests < ThinpTestCase
   end
 
   def test_writethrough_ext4_uuids_match
-    size = meg(10)
+    size = gig(32) # a 32GB origin was used in the report to dm-devel
 
-    # wipe the origin to ensure we don't accidentally have the same
-    # data on it.
-    with_standard_linear(:data_size => size) do |origin|
+    # wipe the start of the origin to ensure we don't accidentally
+    # have the same data on it.
+    with_standard_linear(:data_size => meg(1)) do |origin|
       wipe_device(origin)
     end
-
-    uuid = "deadbeef-cafe-dead-beef-cafedeadbeef"
 
     with_standard_cache(:format => true,
                         :io_mode => :writethrough,
                         :data_size => size) do |cache|    
-      # establish thresholds that were used in report to dm-devel
+      # establish thresholds that were used in the report to dm-devel
       cache.message(0, "migration_threshold 32768")
       cache.message(0, "random_threshold 4")
       status = CacheStatus.new(cache)
@@ -440,13 +438,13 @@ class CacheTests < ThinpTestCase
       end
 
       # format the cache device with a specific uuid
+      uuid = "deadbeef-cafe-dead-beef-cafedeadbeef"
       fs = FS::file_system(:ext4, cache)
       fs.format(:uuid => uuid)
-      FS::assert_fs_uuid(uuid, cache)
 
-      # origin should have the same uuid as the cache
-      # - note: cache is still active at this point
+      # origin and cache should have the same uuid
       FS::assert_fs_uuid(uuid, @data_dev)
+      FS::assert_fs_uuid(uuid, cache)
     end
   end
 
