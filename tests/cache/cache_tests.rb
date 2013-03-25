@@ -437,7 +437,7 @@ class CacheTests < ThinpTestCase
   end
 
   def test_writethrough_ext4_uuids_match
-    size = gig(32) # a 32GB origin was used in the report to dm-devel
+    size = gig(2)
 
     # wipe the start of the origin to ensure we don't accidentally
     # have the same data on it.
@@ -445,22 +445,17 @@ class CacheTests < ThinpTestCase
       wipe_device(origin)
     end
 
+    # wipe the start of the ssd to ensure it doesn't have the uuid
     with_standard_cache(:format => true,
+                        :format_ssd => true,
                         :io_mode => :writethrough,
-                        :data_size => size) do |cache|    
+                        :data_size => size) do |cache|
       # establish thresholds that were used in the report to dm-devel
       cache.message(0, "migration_threshold 32768")
       cache.message(0, "random_threshold 4")
       status = CacheStatus.new(cache)
       assert(status.core_args.assoc('migration_threshold'), '32768')
       assert(status.policy_args.assoc('random_threshold'), '4')
-
-      # reload table with raw origin
-      table = cache.active_table
-      table.targets[0].args[2] = @data_dev
-      cache.pause do
-        cache.load(table)
-      end
 
       # format the cache device with a specific uuid
       uuid = "deadbeef-cafe-dead-beef-cafedeadbeef"
