@@ -86,6 +86,20 @@ class CacheTests < ThinpTestCase
     end
   end
 
+  tag :cache_target
+  def test_fio_database_funtime
+    with_standard_cache(:cache_size => meg(1024),
+                        :format => true,
+                        :block_size => 256,
+                        :data_size => gig(10),
+                        :policy => Policy.new('mq')) do |cache|
+      cache.message(0, "sequential_threshold 32768") # 16M
+      do_fio(cache, :ext4,
+             :outfile => "../fio_dm_cache.out",
+             :cfgfile => "../tests/cache/database-funtime.fio")
+    end
+  end
+
   def test_fio_sub_volume
     with_standard_cache(:cache_size => meg(256),
                         :format => true,
@@ -142,7 +156,7 @@ class CacheTests < ThinpTestCase
     fs.with_mount('./test_fs', :discard => true) do
       Dir.chdir('./test_fs') do
         report_time("bonnie++") do
-          ProcessControl::run("bonnie++ -d . -u root -s 1024")
+          ProcessControl::run("bonnie++ -d . -r 0 -u root -s 1024")
         end
       end
     end
@@ -504,7 +518,7 @@ class CacheTests < ThinpTestCase
     opts = Hash.new
     stack = CacheStack.new(@dm, @metadata_dev, @data_dev, opts)
     stack.activate do |stack|
-      assert(stack.cache.table =~ /0 41943040 cache \d+:\d+ \d+:\d+ \d+:\d+ 512 0 default 0/)
+      assert(stack.cache.table =~ /0 \d+ cache \d+:\d+ \d+:\d+ \d+:\d+ 512 0 default 0/)
     end
   end
 
