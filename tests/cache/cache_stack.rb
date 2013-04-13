@@ -55,7 +55,6 @@ class CacheStack
       @origin = origin
 
       wipe_device(md, 8) if @opts.fetch(:format, true)
-      wipe_device(ssd, 8) if @opts.fetch(:format_ssd, true)
 
       with_dev(cache_table) do |cache|
         @cache = cache
