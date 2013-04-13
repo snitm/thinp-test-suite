@@ -11,7 +11,7 @@ require 'lib/test-utils'
 require 'lib/tvm.rb'
 require 'tests/cache/cache_stack'
 require 'tests/cache/policy'
-require 'tests/cache/extra_policies_tests'
+require 'tests/cache/fio_subvolume_scenario'
 
 require 'pp'
 
@@ -22,6 +22,7 @@ class CacheTests < ThinpTestCase
   include Tags
   include Utils
   include DiskUnits
+  include FioSubVolumeScenario
   extend TestUtils
 
   POLICY_NAMES = %w(mq)
@@ -74,19 +75,6 @@ class CacheTests < ThinpTestCase
 
   #--------------------------------
 
-  def do_fio(dev, fs_type, opts = Hash.new)
-    outfile = opts.fetch(:outfile , "../fio.out")
-    cfgfile = opts.fetch(:cfgfile , "../tests/cache/fio.config")
-    fs = FS::file_system(fs_type, dev)
-    fs.format
-
-    fs.with_mount('./fio_test', :discard => false) do
-      Dir.chdir('./fio_test') do
-        ProcessControl.run("fio #{cfgfile} --output=#{outfile}")
-      end
-    end
-  end
-
   tag :cache_target
   def test_fio_cache
     with_standard_cache(:cache_size => meg(512),
@@ -98,100 +86,15 @@ class CacheTests < ThinpTestCase
     end
   end
 
-  tag :cache_target
-  def test_fio_compare_cache_and_bcache
-    with_standard_cache(:cache_size => meg(1024),
-                        :format => true,
-                        :block_size => 256,
-                        :data_size => gig(10),
-                        :policy => Policy.new('mq')) do |cache|
-      cache.message(0, "sequential_threshold 32768") # 16M
-      do_fio(cache, :ext4,
-             :outfile => "../fio_dm_cache.out",
-             :cfgfile => "../tests/cache/database-funtime.fio")
-    end
-
-    stack = BcacheStack.new(@dm, @metadata_dev, @data_dev,
-                            :cache_size => meg(1024),
-                            :format => true,
-                            :block_size => 256,
-                            :data_size => gig(10))
-    stack.activate do |bcache|
-      do_fio(bcache, :ext4,
-             :outfile => "../fio_bcache.out",
-             :cfgfile => "../tests/cache/database-funtime.fio")
-    end
-  end
-
-  def test_fio_soak_test
-    subvolume_count = 4
-    subvolume_size = meg(256)
-
+  def test_fio_sub_volume
     with_standard_cache(:cache_size => meg(256),
                         :format => true,
                         :block_size => 512,
                         :data_size => gig(4),
                         :policy => Policy.new('mq')) do |cache|
 
-      # now we divide this up into subvolumes
-      tvm = TinyVolumeManager::VM.new
-
-      if subvolume_count * subvolume_size > dev_size(cache)
-        raise RuntimeError, "data device not big enough"
-      end
-
-      tvm.add_allocation_volume(cache, 0, subvolume_count * subvolume_size)
-      1.upto(subvolume_count) do |n|
-        tvm.add_volume(linear_vol("linear_#{n}", subvolume_size))
-      end
-
-      # the test runs fio over each of these sub volumes in turn with
-      # a sleep in between for the cache to sort itself out.
-      1.upto(subvolume_count) do |n|
-        with_dev(tvm.table("linear_#{n}")) do |subvolume|
-          report_time("fio across subvolume #{n}", STDERR) do
-            do_fio(subvolume, :ext4, "../fio_#{n}.out")
-            wait_for_all_clean(cache)
-          end
-        end
-      end
-    end
-  end
-
-  def test_fio_soak_test_bcache
-    subvolume_count = 4
-    subvolume_size = meg(256)
-
-    stack = BcacheStack.new(@dm, @metadata_dev, @data_dev,
-                            :cache_size => meg(256),
-                            :format => true,
-                            :block_size => 1024,
-                            :data_size => gig(4))
-    stack.activate do |cache|
-
-      # now we divide this up into subvolumes
-      tvm = TinyVolumeManager::VM.new
-
-      if subvolume_count * subvolume_size > dev_size(cache)
-        raise RuntimeError, "data device not big enough"
-      end
-
-      tvm.add_allocation_volume(cache, 0, subvolume_count * subvolume_size)
-      1.upto(subvolume_count) do |n|
-        tvm.add_volume(linear_vol("linear_#{n}", subvolume_size))
-      end
-
-      # the test runs fio over each of these sub volumes in turn with
-      # a sleep in between for the cache to sort itself out.
-      1.upto(subvolume_count) do |n|
-        with_dev(tvm.table("linear_#{n}")) do |subvolume|
-          report_time("fio across subvolume #{n}", STDERR) do
-            do_fio(subvolume, :ext4, "../fio_#{n}.out")
-            #wait_for_all_clean(cache)
-            sleep 5
-          end
-        end
-      end
+      wait = lambda {wait_for_all_clean(cache)}
+      fio_sub_volume_scenario(cache, &wait)
     end
   end
 
@@ -239,7 +142,7 @@ class CacheTests < ThinpTestCase
     fs.with_mount('./test_fs', :discard => true) do
       Dir.chdir('./test_fs') do
         report_time("bonnie++") do
-          ProcessControl::run("bonnie++ -d . -r 0 -u root -s 1024")
+          ProcessControl::run("bonnie++ -d . -u root -s 1024")
         end
       end
     end
@@ -275,7 +178,7 @@ class CacheTests < ThinpTestCase
 
   tag :cache_target
   def test_git_extract_cache_quick
-    do_git_extract_cache_quick(:policy => Policy.new('mq', :migration_threshold => 0),
+    do_git_extract_cache_quick(:policy => Policy.new('mq', :migration_threshold => 512),
                                :cache_size => meg(256),
                                :block_size => 512,
                                :data_size => gig(2))
@@ -342,14 +245,6 @@ class CacheTests < ThinpTestCase
   end
 
   define_tests_across(:cache_sizing_effect, POLICY_NAMES)
-
-  def test_git_extract_bcache_quick
-    stack = BcacheStack.new(@dm, @metadata_dev, @data_dev, :cache_size => meg(256))
-    stack.activate do |cache|
-      git_prepare(cache, :ext4)
-      git_extract(cache, :ext4, TAGS[0..5])
-    end
-  end
 
   tag :linear_target
   def test_git_extract_linear
@@ -609,7 +504,7 @@ class CacheTests < ThinpTestCase
     opts = Hash.new
     stack = CacheStack.new(@dm, @metadata_dev, @data_dev, opts)
     stack.activate do |stack|
-      assert(stack.cache.table =~ /0 \d+ cache \d+:\d+ \d+:\d+ \d+:\d+ 512 0 default 0/)
+      assert(stack.cache.table =~ /0 41943040 cache \d+:\d+ \d+:\d+ \d+:\d+ 512 0 default 0/)
     end
   end
 

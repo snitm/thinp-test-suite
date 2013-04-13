@@ -338,24 +338,24 @@ class BcacheStack
   def activate(&block)
     with_devs(@tvm.table('ssd'),
               @data_tvm.table('origin')) do |ssd, origin|
-      bucket_size = block_size / 2
-      ProcessControl.run("make-bcache  --cache_replacement_policy=#{policy} -b #{bucket_size}k --writeback --discard -B #{origin} -C #{ssd}")
+      ProcessControl.run("make-bcache -B #{origin} -C #{ssd} --cache_replacement_policy=#{policy} -w #{block_size} --writeback --discard")
       ProcessControl.run("echo #{origin} > /sys/fs/bcache/register")
       ProcessControl.run("echo #{ssd} > /sys/fs/bcache/register")
 
-      # need to readlink to get the bcache device name... so nasty
+      # FIXME: need to readlink to get the bcache device name... so nasty
       # ls -ltr /sys/block/dm-10/bcache/dev
       # lrwxrwxrwx 1 root root 0 Jan 16 13:58 /sys/block/dm-10/bcache/dev -> ../../bcache3
       bcache_name = File.readlink("/sys/block/#{origin.dm_name}/bcache/dev").split('/')[2]
       @cache = "/dev/#{bcache_name}"
       block.call(@cache)
       ProcessControl.run("echo 1 > /sys/block/#{bcache_name}/bcache/cache/unregister")
+      sleep 2 # FIXME: remove once reported bcache kernel bug is fixed
       ProcessControl.run("echo 1 > /sys/block/#{bcache_name}/bcache/stop")
     end
   end
 
   def policy
-    @opts.fetch(:policy, 'lru')
+    @opts.fetch(:policy, 'fifo')
   end
 
   def cache_mode
@@ -363,7 +363,7 @@ class BcacheStack
   end
 
   def block_size
-    @opts.fetch(:block_size, 1024)
+    @opts.fetch(:block_size, 4096)
   end
 
   def origin_size
