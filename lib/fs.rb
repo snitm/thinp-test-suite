@@ -42,6 +42,12 @@ module FS
     end
   end
 
+  class Btrfs < BaseFS
+    def mount_cmd(mount_point, opts); "mount #{dev} #{mount_point} #{opts[:discard] ? "-o discard" : ''}"; end
+    def check_cmd; "btrfsck #{dev}"; end
+    def mkfs_cmd; "mkfs.btrfs #{dev}"; end
+  end
+
   class Ext4 < BaseFS
     def mount_cmd(mount_point, opts); "mount #{dev} #{mount_point} #{opts[:discard] ? "-o discard" : ''}"; end
     def check_cmd; "fsck.ext4 -fn #{dev}"; end
@@ -55,6 +61,7 @@ module FS
   end
 
   FS_CLASSES = {
+    :btrfs => Btrfs,
     :ext4 => Ext4,
     :xfs => XFS
   }

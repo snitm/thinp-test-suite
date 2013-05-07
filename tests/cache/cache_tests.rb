@@ -183,10 +183,11 @@ class CacheTests < ThinpTestCase
 
   def do_git_extract_cache_quick(opts)
     i = opts.fetch(:nr_tags, 5)
+    fs_type = opts.fetch(:fs_type, :ext4)
     stack = CacheStack.new(@dm, @metadata_dev, @data_dev, opts)
     stack.activate do |stack|
-      git_prepare(stack.cache, :ext4)
-      git_extract(stack.cache, :ext4, TAGS[0..i])
+      git_prepare(stack.cache, fs_type)
+      git_extract(stack.cache, fs_type, TAGS[0..i])
     end
   end
 
@@ -196,6 +197,21 @@ class CacheTests < ThinpTestCase
                                :cache_size => meg(256),
                                :block_size => 512,
                                :data_size => gig(2))
+  end
+
+  tag :cache_target
+  def test_git_extract_cache_quick_btrfs_wt
+    do_git_extract_cache_quick(:policy => Policy.new('mq', :migration_threshold => 512),
+                               :io_mode => :writethrough,
+                               :cache_size => meg(256),
+                               :block_size => 512,
+                               :data_size => gig(2),
+                               :fs_type => :btrfs,
+                               :nr_tags => 1)
+
+    with_standard_linear(:data_size => gig(2)) do |origin|
+      git_extract(origin, :btrfs, TAGS[0..5])
+    end
   end
 
   def test_git_extract_cache_quick_across_migration_threshold
